@@ -1,15 +1,12 @@
 # Avaya Element SDK Bridge (NickCRM)
 
-A headless, bidirectional iframe bridge built with TypeScript and Vite that connects a custom React CRM to the Avaya CCaaS "Element" SDK. 
+A headless, bidirectional iframe bridge built with TypeScript and Vite that connects a custom React CRM to an instance of the Avaya Infinity Agent desktop via the "Element" SDK. 
 
-This bridge acts as a middleware translation layer. It intercepts native window events from the parent CRM and translates them into Avaya SDK commands, while simultaneously listening to Avaya interaction events and pushing normalized screen pop payloads back up to the CRM.
+This bridge acts as a middleware translation layer. It intercepts native window events from the parent CRM and translates them into Avaya SDK commands, while simultaneously listening to Avaya interaction events and pushing normalized screen pop payloads back up to the CRM. In your CRM application, you host the bridge code inside of an iframe. The bridge, in turn, hosts an instance of the Agent desktop in its own iframe.
 
 ## Features
-* **Click-to-Dial:** Dynamically resolves agent queues and executes native Avaya outbound dials.
-* **Real-time Screen Pops:** Subscribes to Avaya interaction events (`alerting`, `updated`) to push custom metadata to the CRM before the agent even answers the call.
-* **Just-In-Time (JIT) Routing:** Bypasses Avaya boot-up race conditions by fetching agent Queue IDs on-demand during the first outbound dial.
-* **Hydration Delay:** Implements an intelligent 500ms delay during the `alerting` phase to allow the Avaya backend cache to hydrate custom interaction variables.
-* **Greedy Listener Bypass:** Uses the `postMessage` capture phase to intercept CRM commands before Avaya's aggressive internal listeners can swallow them.
+* **Click-to-Dial:** Links in your CRM application executes a function which uses iframe.current.contentWindow.postMessage() to send the command to the bridge. The bridge places the call using the Element framework using its api.createVoiceInteraction() method.
+* **Real-time Screen Pops:** Populate interaction.custom.crm.nickCRM.ID with the callerID of the customer. Via the Element framework, the bridge subscribes to onInteractionStatusChanged and onInteractionUpdated events and fetches the interation data - if this custom data has changed it pushes a command to the CRM application using window.parent.postMessage(). the CRM application acts on these messages by updating the screen.
 
 ## Architecture
 
@@ -49,7 +46,7 @@ iframe.contentWindow.postMessage({
   type: 'voice:dialout',
   payload: { 
     phoneNumber: '+19176858541',
-    queueId: '003' // Optional. Bridge will auto-fetch the agent's default queue if omitted.
+    queueId: '003xxxxxxxxxxxx' // Required. Bridge auto-fetch the agent's default queue using the Element framework api.getUserInfo() method.
   }
 }, '*'); 
 // Note: Target origin '*' or the exact domain where the bridge is hosted.
