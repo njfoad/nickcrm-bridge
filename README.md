@@ -5,8 +5,9 @@ A headless, bidirectional iframe bridge built with TypeScript and Vite that conn
 This bridge acts as a middleware translation layer. It intercepts native window events from the parent CRM and translates them into Avaya SDK commands, while simultaneously listening to Avaya interaction events and pushing normalized screen pop payloads back up to the CRM. In your CRM application, you host the bridge code inside of an iframe. The bridge, in turn, hosts an instance of the Agent desktop in its own iframe.
 
 ## Features
-* **Click-to-Dial:** Links in your CRM application executes a function which uses iframe.current.contentWindow.postMessage() to send the command to the bridge. The bridge places the call using the Element framework using its api.createVoiceInteraction() method.
-* **Real-time Screen Pops:** Populate interaction.custom.crm.nickCRM.ID with the callerID of the customer. Via the Element framework, the bridge subscribes to onInteractionStatusChanged and onInteractionUpdated events and fetches the interation data - if this custom data has changed it pushes a command to the CRM application using window.parent.postMessage(). the CRM application acts on these messages by updating the screen.
+- **Click-to-Dial:** Links in your CRM application executes a function which uses iframe.current.contentWindow.postMessage() to send the command to the bridge. The bridge places the call using the Element framework using its api.createVoiceInteraction() method.
+- **Real-time Screen Pops:** Populate interaction.custom.crm.nickCRM.ID with the callerID of the customer. Via the Element framework, the bridge subscribes to onInteractionStatusChanged and onInteractionUpdated events and fetches the interation data - if this custom data has changed it pushes a command to the CRM application using window.parent.postMessage(). the CRM application acts on these messages by updating the screen.
+- **Pop-Out / Pop-In Workspace:** Supports detaching the Avaya Agent desktop into an external popup window while maintaining the integration state. The bridge dynamically re-binds the Element SDK to the new window target.
 
 ## Architecture
 
@@ -66,12 +67,24 @@ window.addEventListener('message', (event) => {
 });
 ```
 
+### 3. UI Commands: Pop-Out / Pop-In (CRM -> Bridge)
+To toggle the Avaya UI between the embedded iframe and a detached popup window, send a UI command.
+
+**Example Payload:**
+```javascript
+iframe.contentWindow.postMessage({
+  channel: 'infinity-crm-bridge',
+  type: 'ui:pop-out' // Use 'ui:pop-in' to dock the window back
+}, '*');
+```
+
 ## Technical Notes & CCaaS Quirks Handled
 
-* **Avaya Event Swallowing:** The Avaya SDK aggressively intercepts window messages. To prevent the CRM's `voice:dialout` messages from being destroyed, the bridge's downstream listener uses `{ capture: true }`.
-* **The "Null" Alerting Event:** When a call enters the `alerting` state, the Avaya event fires *before* the backend has fully hydrated the interaction object with custom IVR variables. The bridge introduces a non-blocking `500ms` delay on `alerting` events to guarantee `api.getInteraction()` returns the full payload.
-* **Strict Case Sensitivity:** Interaction data must be accessed exactly at `custom.crm.nickCRM`. CCaaS environments are strictly case-sensitive.
-* **Duplicate Event Prevention:** Avaya fires multiple status updates per interaction phase. The bridge uses a `dataStash` map with `stableStringify` hashing to ensure the CRM only receives one Screen Pop per unique dataset.
+- **Avaya Event Swallowing:** The Avaya SDK aggressively intercepts window messages. To prevent the CRM's `voice:dialout` messages from being destroyed, the bridge's downstream listener uses `{ capture: true }`.
+- **The "Null" Alerting Event:** When a call enters the `alerting` state, the Avaya event fires *before* the backend has fully hydrated the interaction object with custom IVR variables. The bridge introduces a non-blocking `500ms` delay on `alerting` events to guarantee `api.getInteraction()` returns the full payload.
+- **Strict Case Sensitivity:** Interaction data must be accessed exactly at `custom.crm.nickCRM`. CCaaS environments are strictly case-sensitive.
+- **Duplicate Event Prevention:** Avaya fires multiple status updates per interaction phase. The bridge uses a `dataStash` map with `stableStringify` hashing to ensure the CRM only receives one Screen Pop per unique dataset.
+- **Pop-Out Window Management:** Popping out the agent interface opens a new window, but the original iframe *must remain in the DOM* (hidden via CSS) to maintain the bridge's execution context. The `ElementAPI` is dynamically re-bound to the new popup window object to ensure active call events continue firing while popped out.
 
 ## Development
 To modify the bridge logic, edit `src/bridge.ts`. The application boots from `src/main.ts`. UI boilerplate (CSS/HTML components) has been intentionally removed as this is a headless integration.
